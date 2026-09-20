@@ -16,6 +16,7 @@ escolha seja barata e informada, nao que ela desapareca.
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
@@ -81,8 +82,16 @@ class GenreProfile:
     description: str = ""
 
     def for_instruments(self, instruments: Sequence[str]) -> list[TrackPlan]:
+        """Planos para os instrumentos pedidos, sempre COPIADOS.
+
+        Os perfis sao objetos de modulo, compartilhados por todo o processo.
+        Devolver as referencias fazia `--set-track` reescrever o perfil global
+        de forma permanente: numa rodada so da CLI nada aparece, mas o
+        primeiro `--set-track` de um modo lote envenenaria todas as musicas
+        seguintes, e como biblioteca o estado vazaria entre chamadas.
+        """
         wanted = {i.lower() for i in instruments}
-        return [p for p in self.plans if p.instrument in wanted]
+        return [copy.deepcopy(p) for p in self.plans if p.instrument in wanted]
 
 
 # ---------------------------------------------------------------- overrides

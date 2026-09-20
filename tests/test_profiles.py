@@ -62,6 +62,26 @@ def test_resolve_plans_rejects_an_impossible_request():
         resolve_plans("percussion", ["vocals"])
 
 
+def test_plans_are_copies_not_the_global_profile():
+    """Regressao: `--set-track` mutava o perfil de modulo para sempre. Numa
+    rodada da CLI e invisivel; num modo lote a primeira musica contaminaria
+    todas as seguintes."""
+    first = resolve_plans("rock", ["guitar"])[0]
+    first.sources = ["drums"] + first.sources
+    first.strategy = profiles.PERCUSSIVE
+
+    again = resolve_plans("rock", ["guitar"])[0]
+    assert again.sources[0] == "guitar"
+    assert again.strategy == profiles.PITCH
+    assert profiles.get("rock").plans[0].sources[0] == "guitar"
+
+
+def test_track_overrides_do_not_leak_between_profiles():
+    plan = resolve_plans("trap", ["guitar"])[0]
+    plan.overrides["mapper.max_jump"] = 99
+    assert "mapper.max_jump" not in resolve_plans("trap", ["guitar"])[0].overrides
+
+
 def test_track_overrides_are_dotted_config_paths():
     from yargen.config import DEFAULT
 
