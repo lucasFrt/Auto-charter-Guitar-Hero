@@ -1,9 +1,19 @@
-"""O mapper: (tempo, pitch, forca) -> trastes.
+"""O mapper: (tempo, tom, forca) -> trastes.
 
 Este e o modulo que decide se o chart e gostoso ou intocavel. Tudo aqui e
 funcao pura sobre a IR de analise: nao importa librosa, nao le arquivo, nao
 tem estado global. E de proposito - e o que permite testar o mapper com JSON
 fixo e iterar nos parametros sem re-rodar 6 minutos de Demucs.
+
+Ordem dos estagios, e por que ela e essa:
+
+O mapper NAO sabe de onde vem o "tom" de uma nota. Ele recebe um escalar por
+nota, em escala logaritmica de semitons, e distribui em cinco faixas. Para
+conteudo melodico o escalar e a altura (f0); para conteudo percussivo e o
+brilho (centroide espectral), porque bateria nao tem altura mas tem uma escala
+grave->agudo igualmente obvia. Essa indiferenca e o que permite chartear trap
+- onde a trilha de 5 trastes e a BATIDA - com o mesmo codigo que charteia um
+riff de rock.
 
 Ordem dos estagios, e por que ela e essa:
 
@@ -41,20 +51,36 @@ class _Event:
     tick: int
     time: float
     strength: float
-    pitches: list[float]
-    """Semitons MIDI fracionarios dos onsets que compoem este evento."""
+    tones: list[float]
+    """Tom dos onsets que compoem este evento, em escala de semitons. Altura
+    para conteudo melodico, brilho para percussivo - o mapper nao distingue."""
 
     frets: list[int]
 
     @property
-    def pitch(self) -> float | None:
-        return float(np.median(self.pitches)) if self.pitches else None
+    def tone(self) -> float | None:
+        return float(np.median(self.tones)) if self.tones else None
 
 
 # ============================================================ 1. quantizacao
 
+def tone_from_pitch(note: AnalyzedNote) -> float | None:
+    """Altura em semitons MIDI. Conteudo melodico."""
+    return hz_to_midi(note.pitch_hz)
+
+
+def tone_from_centroid(note: AnalyzedNote) -> float | None:
+    """Brilho em semitons. Conteudo percussivo.
+
+    Mesma escala logaritmica da altura de proposito: assim as tolerancias em
+    "semitons" (ancora, limiar de acorde) significam a mesma coisa nos dois
+    modos e nao precisam de um segundo conjunto de parametros.
+    """
+    return hz_to_midi(note.centroid_hz)
+
+
 def quantize(notes: Sequence[AnalyzedNote], tempo: TempoMap,
-             cfg: MapperConfig) -> list[_Event]:
+             cfg: MapperConfig, tone_of=tone_from_pitch) -> list[_Event]:
     """Alinha os onsets a grade, mas nao a qualquer custo.
 
     Se a posicao quantizada cair a mais de `quantize_max_shift_ms` do onset
@@ -69,9 +95,9 @@ def quantize(notes: Sequence[AnalyzedNote], tempo: TempoMap,
         shift_ms = abs(tempo.tick_to_time(snapped) - note.time) * 1000.0
         tick = snapped if shift_ms <= cfg.quantize_max_shift_ms else \
             int(round(tempo.time_to_tick(note.time)))
-        midi = hz_to_midi(note.pitch_hz)
+        tone = tone_of(note)
         events.append(_Event(max(0, tick), note.time, note.strength,
-                             [midi] if midi is not None else [], []))
+                             [tone] if tone is not None else [], []))
     events.sort(key=lambda e: (e.tick, e.time))
     return events
 
@@ -98,14 +124,14 @@ def group_chords(events: list[_Event], tempo: TempoMap,
         close = (event.tick - current.tick) <= window_ticks
         strong_enough = min(event.strength, current.strength) >= cfg.chord_min_strength
         if close and strong_enough and cfg.chord_max_frets > 1:
-            current.pitches.extend(event.pitches)
+            current.tones.extend(event.tones)
             current.strength = max(current.strength, event.strength)
         elif close:
             # Perto demais para serem duas notas, fraco demais para ser acorde:
             # fica a mais forte das duas.
             if event.strength > current.strength:
                 current.strength = event.strength
-                current.pitches = event.pitches or current.pitches
+                current.tones = event.tones or current.tones
         else:
             out.append(current)
             current = event
@@ -139,7 +165,7 @@ def cap_density(events: list[_Event], tempo: TempoMap, max_nps: float,
 # ========================================================= 4. pitch -> traste
 
 class _Anchors:
-    """Memoria de "este pitch ja virou este traste".
+    """Memoria de "este tom ja virou este traste".
 
     Preserva riffs: se a musica volta ao mesmo si bemol tres compassos depois,
     o jogador reencontra a mesma casa e o padrao continua reconhecivel no
@@ -152,20 +178,20 @@ class _Anchors:
         self.tolerance = tolerance
         self._items: list[tuple[float, float, int]] = []  # (time, pitch, fret)
 
-    def lookup(self, time: float, pitch: float) -> int | None:
+    def lookup(self, time: float, tone: float) -> int | None:
         self._items = [it for it in self._items if time - it[0] <= self.window]
         best, best_dist = None, self.tolerance
         for t, p, fret in reversed(self._items):
-            dist = abs(p - pitch)
+            dist = abs(p - tone)
             if dist <= best_dist:
                 best, best_dist = fret, dist
         return best
 
-    def record(self, time: float, pitch: float, fret: int) -> None:
-        self._items.append((time, pitch, fret))
+    def record(self, time: float, tone: float, fret: int) -> None:
+        self._items.append((time, tone, fret))
 
 
-def _band_edges(pitches: Sequence[float], percentiles: Sequence[float]) -> np.ndarray:
+def _band_edges(tones: Sequence[float], percentiles: Sequence[float]) -> np.ndarray:
     """Cortes de percentil calculados sobre as alturas DISTINTAS da janela.
 
     Sobre as alturas repetidas os percentis empatam e as faixas colapsam: um
@@ -177,67 +203,97 @@ def _band_edges(pitches: Sequence[float], percentiles: Sequence[float]) -> np.nd
     vibrato ou um bend leve virem "alturas diferentes" e reintroduzam o
     mesmo empate por outro caminho.
     """
-    values = np.unique(np.round(np.asarray(pitches, dtype=float)))
+    values = np.unique(np.round(np.asarray(tones, dtype=float)))
     if values.size < 2:
-        values = np.unique(np.asarray(pitches, dtype=float))
+        values = np.unique(np.asarray(tones, dtype=float))
     return np.percentile(values, list(percentiles))
 
 
-def assign_frets(events: list[_Event], tempo: TempoMap,
-                 cfg: MapperConfig) -> list[_Event]:
-    """Atribui trastes a partir do contorno de pitch.
+ROLLING = "rolling"
+GLOBAL = "global"
 
-    Janela movel de `band_window_sec` dividida em 5 faixas por percentil. Movel
-    e nao global porque o registro muda entre secoes: um solo uma oitava acima
-    da estrofe viraria "tudo laranja" com faixas globais, quando o que se quer
-    e ele usar os cinco trastes tambem.
+
+def assign_frets(events: list[_Event], tempo: TempoMap, cfg: MapperConfig,
+                 *, band_scope: str = ROLLING) -> list[_Event]:
+    """Atribui trastes a partir do tom.
+
+    `band_scope` decide sobre o que os percentis sao calculados:
+
+      ROLLING - janela movel de `band_window_sec`. Para conteudo melodico: o
+        registro muda entre estrofe e refrao, e um solo uma oitava acima da
+        estrofe deve usar os cinco trastes tambem, nao virar "tudo laranja".
+
+      GLOBAL - a musica inteira de uma vez. Para conteudo percussivo: um kit
+        de bateria tem quatro ou cinco sons e eles nao mudam. O bumbo precisa
+        ser verde no compasso 1 e no compasso 80. Uma janela movel
+        reclassificaria o bumbo conforme o arranjo fica mais cheio ou mais
+        vazio, e a batida deixaria de ser reconhecivel - que e justamente o
+        que se quer tocar.
     """
-    pitched = [(i, e) for i, e in enumerate(events) if e.pitch is not None]
-    if not pitched:
+    toned = [(i, e) for i, e in enumerate(events) if e.tone is not None]
+    if not toned:
         return assign_frets_random(events, cfg)
 
-    times = np.array([e.time for _, e in pitched])
-    pitches = np.array([e.pitch for _, e in pitched])
+    # Achatado: uma entrada por TOM, nao por evento. Usar a mediana do evento
+    # aqui envenenava as faixas - num acorde de bumbo+chimbal a mediana cai no
+    # meio, onde nao ha peca nenhuma, e os cortes de percentil saiam deslocados
+    # a ponto de a caixa ser classificada junto com o bumbo.
+    flat_times = np.array([e.time for _, e in toned for _ in e.tones])
+    flat_tones = np.array([t for _, e in toned for t in e.tones])
+
     anchors = _Anchors(cfg.anchor_window_sec, cfg.anchor_tolerance_semitones)
     half = cfg.band_window_sec / 2.0
+    global_edges = _band_edges(flat_tones, cfg.band_percentiles) \
+        if band_scope == GLOBAL else None
 
     last_fret = 2
-    for k, (idx, event) in enumerate(pitched):
-        pitch = event.pitch
-        assert pitch is not None
+    for k, (idx, event) in enumerate(toned):
+        tone = event.tone
+        assert tone is not None
 
-        if cfg.anchor_enabled:
-            anchored = anchors.lookup(event.time, pitch)
+        if cfg.anchor_enabled and len(event.tones) == 1:
+            anchored = anchors.lookup(event.time, tone)
             if anchored is not None:
                 event.frets = [anchored]
                 last_fret = anchored
                 continue
 
-        lo = int(np.searchsorted(times, event.time - half))
-        hi = int(np.searchsorted(times, event.time + half))
-        if hi - lo < cfg.band_min_notes:
-            # Janela pobre (inicio da musica, trecho esparso): expande por
-            # indice ate ter estatistica suficiente em vez de calcular
-            # percentis em cima de duas notas.
-            need = cfg.band_min_notes
-            lo = max(0, k - need // 2)
-            hi = min(len(pitched), lo + need)
-            lo = max(0, hi - need)
-
-        window = pitches[lo:hi]
-        if window.size < 2 or float(np.ptp(window)) < 1e-6:
-            fret = last_fret
+        if global_edges is not None:
+            edges = global_edges
         else:
-            edges = _band_edges(window, cfg.band_percentiles)
-            fret = int(np.searchsorted(edges, pitch, side="right"))
-            fret = max(0, min(N_FRETS - 1, fret))
+            lo = int(np.searchsorted(flat_times, event.time - half))
+            hi = int(np.searchsorted(flat_times, event.time + half))
+            if hi - lo < cfg.band_min_notes:
+                # Janela pobre (inicio da musica, trecho esparso): expande por
+                # indice ate ter estatistica suficiente em vez de calcular
+                # percentis em cima de duas notas.
+                need = cfg.band_min_notes
+                centre = int(np.searchsorted(flat_times, event.time))
+                lo = max(0, centre - need // 2)
+                hi = min(len(flat_tones), lo + need)
+                lo = max(0, hi - need)
+            window = flat_tones[lo:hi]
+            edges = _band_edges(window, cfg.band_percentiles) \
+                if window.size >= 2 and float(np.ptp(window)) >= 1e-6 else None
 
-        event.frets = [fret]
-        last_fret = fret
-        if cfg.anchor_enabled:
-            anchors.record(event.time, pitch, fret)
+        if edges is None:
+            event.frets = [last_fret]
+        else:
+            # Um traste POR TOM. Sem isto, um evento com dois tons - que e o
+            # que um acorde E - era reduzido a mediana dos dois e virava uma
+            # nota unica em algum lugar no meio. Acorde nenhum saia do mapper,
+            # em nenhuma estrategia; `shape_chords` recebia sempre uma lista
+            # de um elemento e nao tinha o que moldar.
+            frets = sorted({max(0, min(N_FRETS - 1,
+                                       int(np.searchsorted(edges, t, side="right"))))
+                            for t in event.tones})
+            event.frets = frets or [last_fret]
 
-    # Eventos sem pitch herdam o traste do vizinho anterior: repetir uma nota
+        last_fret = event.frets[0]
+        if cfg.anchor_enabled and len(event.tones) == 1:
+            anchors.record(event.time, tone, event.frets[0])
+
+    # Eventos sem tom herdam o traste do vizinho anterior: repetir uma nota
     # e sempre jogavel, e melhor do que inventar.
     prev = 2
     for event in events:
@@ -303,13 +359,17 @@ def shape_chords(events: list[_Event], cfg: MapperConfig) -> list[_Event]:
     quer isso em um chart gerado automaticamente.
     """
     for event in events:
-        if len(event.pitches) <= 1:
+        if len(event.tones) <= 1:
             event.frets = event.frets[:1] or [2]
             continue
         frets = sorted(set(event.frets))
         if len(frets) == 1:
             continue
-        frets = [frets[0], frets[-1]][:cfg.chord_max_frets]
+        if len(frets) > cfg.chord_max_frets:
+            # Mais tons do que casas permitidas: fica o mais grave e o mais
+            # agudo, que sao os que definem a forma do acorde.
+            frets = [frets[0], frets[-1]]
+        frets = frets[:cfg.chord_max_frets]
         if cfg.chord_adjacent_only and len(frets) == 2 and frets[1] - frets[0] > 1:
             low = min(frets[0], N_FRETS - 2)
             frets = [low, low + 1]
@@ -328,8 +388,16 @@ def build_notes(events: list[_Event], tempo: TempoMap,
 
     notes: list[ChartNote] = []
     for i, event in enumerate(events):
-        gap = (events[i + 1].tick - event.tick) if i + 1 < len(events) else \
-            int(min_sustain_beats * res)
+        # A ultima nota nao tem proxima, e nao sabemos se ela soa ate o fim da
+        # musica ou para seco. Antes o valor de fallback era exatamente o
+        # limiar de sustain, entao a ultima nota SEMPRE sustentava - inclusive
+        # uma pancada de bumbo, que nunca sustenta. Sem evidencia, nao sustenta;
+        # a cauda final e um ajuste de dez segundos no Moonscraper.
+        if i + 1 >= len(events):
+            notes.append(ChartNote(tick=event.tick, frets=list(event.frets),
+                                   sustain_ticks=0, strength=event.strength))
+            continue
+        gap = events[i + 1].tick - event.tick
         sustain = 0
         if gap >= min_sustain_beats * res:
             sustain = int(min(gap * cfg.sustain_ratio, cfg.sustain_max_beats * res))
@@ -386,15 +454,28 @@ def build_star_power(notes: Sequence[ChartNote], tempo: TempoMap,
 # ==================================================================== api
 
 def map_track(notes: Sequence[AnalyzedNote], tempo: TempoMap,
-              cfg: Config = DEFAULT, *, use_pitch: bool = True) -> InstrumentChart:
-    """Pipeline completo de um stem para um chart Expert."""
+              cfg: Config = DEFAULT, *, use_pitch: bool = True,
+              strategy: str = "pitch") -> InstrumentChart:
+    """Pipeline completo de um stem para um chart Expert.
+
+    `strategy` escolhe de onde vem o tom e como as faixas sao calculadas:
+      "pitch"      - altura, faixas em janela movel (melodico)
+      "percussive" - brilho, faixas globais (bateria, percussao)
+    """
     m = cfg.mapper
-    events = quantize(notes, tempo, m)
+    percussive = strategy == "percussive"
+    tone_of = tone_from_centroid if percussive else tone_from_pitch
+    scope = GLOBAL if percussive else ROLLING
+
+    events = quantize(notes, tempo, m, tone_of)
     events = group_chords(events, tempo, m)
     events = cap_density(events, tempo, m.max_notes_per_second, m.density_window_sec,
                          beat_bonus=cfg.difficulty.beat_bonus,
                          bar_bonus=cfg.difficulty.bar_bonus)
-    events = assign_frets(events, tempo, m) if use_pitch else assign_frets_random(events, m)
+    if use_pitch and any(e.tone is not None for e in events):
+        events = assign_frets(events, tempo, m, band_scope=scope)
+    else:
+        events = assign_frets_random(events, m)
     events = shape_chords(events, m)
     events = limit_jumps(events, tempo, m)
     chart_notes = build_notes(events, tempo, m)

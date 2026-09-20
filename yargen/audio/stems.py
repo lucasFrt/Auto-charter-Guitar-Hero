@@ -48,10 +48,22 @@ class StemSet:
     def names(self) -> tuple[str, ...]:
         return tuple(sorted(self.paths))
 
-    def load(self, name: str, target_sr: int) -> Audio:
+    def load(self, name: str, target_sr: int, *, normalize: bool = True) -> Audio:
+        """Carrega um stem.
+
+        `normalize=False` e obrigatorio para QUALQUER medicao comparativa
+        entre stems: normalizar cada um para pico 1.0 apaga o balanco da
+        mixagem, que e exatamente a informacao que diz qual instrumento
+        conduz a musica. Para analise de um stem isolado (onset, f0) a
+        normalizacao ajuda e continua sendo o padrao.
+        """
         import librosa
+
+        from ..config import AudioConfig
+
         y, sr = librosa.load(str(self.paths[name]), sr=target_sr, mono=True)
-        return from_samples(y, int(sr))
+        return from_samples(y, int(sr), AudioConfig(sample_rate=target_sr,
+                                                    normalize=normalize))
 
     def pick_guitar(self, preference: str = "auto") -> str | None:
         """Qual stem usar como fonte da guitarra.

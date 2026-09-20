@@ -51,7 +51,17 @@ def contour(audio: Audio, cfg: PitchConfig = DEFAULT.pitch) -> PitchContour:
         f0, voiced_flag, voiced_prob = librosa.pyin(
             y, fmin=cfg.fmin_hz, fmax=cfg.fmax_hz, sr=sr,
             frame_length=cfg.frame_length, hop_length=cfg.hop_length)
-        f0 = np.where((voiced_prob >= cfg.voiced_threshold) & np.isfinite(f0), f0, np.nan)
+        # A decisao de vozeamento e do pyin (voiced_flag, suavizado por
+        # Viterbi). `voiced_prob` e a probabilidade por frame e NAO e
+        # comparavel a 0.5 de forma universal: num 808 distorcido ela fica
+        # inteira abaixo de 0.49 enquanto o pyin marca 91% dos frames como
+        # vozeados e acerta a altura. Filtrar por 0.5 apagava o baixo inteiro,
+        # e a trilha PART BASS caia silenciosamente para trastes aleatorios.
+        # O limiar continua disponivel como aperto EXTRA, desligado por padrao.
+        keep = np.isfinite(f0) & (voiced_flag if voiced_flag is not None else True)
+        if cfg.voiced_threshold > 0:
+            keep &= voiced_prob >= cfg.voiced_threshold
+        f0 = np.where(keep, f0, np.nan)
         voiced = np.isfinite(f0)
     else:
         f0 = librosa.yin(y, fmin=cfg.fmin_hz, fmax=cfg.fmax_hz, sr=sr,

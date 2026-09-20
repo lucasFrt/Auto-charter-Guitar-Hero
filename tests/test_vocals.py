@@ -151,20 +151,23 @@ def test_missing_whisper_raises_a_typed_error_not_a_crash(monkeypatch):
 
 def test_pipeline_falls_back_to_pitch_when_transcription_is_unavailable(monkeypatch):
     """O caminho completo: sem letra, vocals ainda tem que sair jogavel."""
+    from yargen import pipeline, profiles
     from yargen.chart import vocals as vocals_mod
-    from yargen import pipeline
 
     monkeypatch.setattr(vocals_mod, "transcribe", lambda *a, **k: (_ for _ in ()).throw(
         vocals_mod.TranscriptionUnavailable("proxy bloqueou o download")))
 
     class Stub:
-        path = None
+        path = "musica.wav"
         duration = 4.0
         samples = None
         sample_rate = 22050
 
     monkeypatch.setattr(pipeline.pitch_mod, "contour",
                         lambda *a, **k: _Contour(smoothed_step(329.63, 392.00, 60)))
-    track = pipeline._analyze_vocals(None, Stub(), DEFAULT, lambda m: None)
+    plan = profiles.get("trap").plans[-1]
+    track = pipeline._analyze_vocals(plan, "mix", Stub(), None, Stub(), DEFAULT,
+                                     lambda m: None)
     assert len(track.words) == 2
     assert all(w.text == "" for w in track.words)
+    assert track.strategy == profiles.VOCAL

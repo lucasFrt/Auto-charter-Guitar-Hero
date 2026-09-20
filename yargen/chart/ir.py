@@ -189,19 +189,26 @@ class AnalyzedNote:
     duration: float = 0.0
     """Ate o proximo onset, ou ate o fim da regiao tonal. 0 = desconhecido."""
 
+    centroid_hz: float | None = None
+    """Brilho (centroide espectral) no ataque. E o escalar que substitui a
+    altura em conteudo percussivo, que nao tem f0."""
+
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {"time": round(self.time, 6),
                              "strength": round(self.strength, 4),
                              "duration": round(self.duration, 6)}
         if self.pitch_hz is not None:
             d["pitch_hz"] = round(self.pitch_hz, 3)
+        if self.centroid_hz is not None:
+            d["centroid_hz"] = round(self.centroid_hz, 3)
         return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "AnalyzedNote":
         return cls(float(d["time"]), float(d.get("strength", 1.0)),
                    (float(d["pitch_hz"]) if d.get("pitch_hz") is not None else None),
-                   float(d.get("duration", 0.0)))
+                   float(d.get("duration", 0.0)),
+                   (float(d["centroid_hz"]) if d.get("centroid_hz") is not None else None))
 
     @property
     def pitch_midi(self) -> float | None:
@@ -246,9 +253,23 @@ class AnalyzedTrack:
     """Qual stem do Demucs gerou isso. Util para depurar a fonte de notas
     espurias sem re-rodar a separacao."""
 
+    track_name: str = ""
+    """Trilha do jogo que esta faixa alimenta: "PART GUITAR", "PART BASS"..."""
+
+    strategy: str = "pitch"
+    """"pitch", "percussive" ou "vocal". Fica gravado na IR para que
+    `yargen build` reproduza o mesmo chart sem precisar do genero de novo."""
+
+    overrides: dict[str, Any] = field(default_factory=dict)
+    """Patch de config especifico desta trilha, vindo do perfil de genero."""
+
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {"name": self.name, "source_stem": self.source_stem,
+                             "track_name": self.track_name,
+                             "strategy": self.strategy,
                              "notes": [n.to_dict() for n in self.notes]}
+        if self.overrides:
+            d["overrides"] = dict(self.overrides)
         if self.words:
             d["words"] = [w.to_dict() for w in self.words]
         return d
@@ -258,7 +279,10 @@ class AnalyzedTrack:
         return cls(str(d["name"]),
                    [AnalyzedNote.from_dict(n) for n in d.get("notes", [])],
                    [AnalyzedWord.from_dict(w) for w in d.get("words", [])],
-                   str(d.get("source_stem", "")))
+                   str(d.get("source_stem", "")),
+                   str(d.get("track_name", "")),
+                   str(d.get("strategy", "pitch")),
+                   dict(d.get("overrides", {})))
 
 
 @dataclass
@@ -289,11 +313,16 @@ class AnalysisIR:
     meta: SongMeta = field(default_factory=SongMeta)
     tempo: TempoMap | None = None
     tracks: dict[str, AnalyzedTrack] = field(default_factory=dict)
+    genre: str = "rock"
+    """Perfil usado na analise. Gravado para a rodada ser reproduzivel e para
+    `yargen build` saber o que foi decidido."""
+
     version: int = IR_VERSION
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "version": self.version,
+            "genre": self.genre,
             "meta": self.meta.to_dict(),
             "tempo": self.tempo.to_dict() if self.tempo else None,
             "tracks": {k: v.to_dict() for k, v in self.tracks.items()},
@@ -305,6 +334,7 @@ class AnalysisIR:
             SongMeta.from_dict(d.get("meta", {})),
             TempoMap.from_dict(d["tempo"]) if d.get("tempo") else None,
             {k: AnalyzedTrack.from_dict(v) for k, v in d.get("tracks", {}).items()},
+            str(d.get("genre", "rock")),
             int(d.get("version", IR_VERSION)),
         )
 

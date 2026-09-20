@@ -9,7 +9,8 @@ nenhuma chamada de rede em runtime (só no download inicial dos pesos dos
 modelos).
 
 ```bash
-yargen chart "Banda - Musica.ogg" --instruments guitar,vocals --keep-ir
+yargen inspect "Musica.mp3"                  # o que essa musica tem? o que chartear?
+yargen chart "Musica.mp3" --genre trap --instruments all --keep-ir
 ```
 
 ## Instalação
@@ -34,13 +35,86 @@ Sem os extras nada quebra: o pipeline detecta a ausência, avisa e segue com o
 que tem. Um chart sem letra é muito melhor do que uma rodada de vários minutos
 que morre no último passo.
 
+## A decisao que mais importa: o que chartear
+
+A premissa obvia - "a trilha de guitarra vem da guitarra" - so vale para rock.
+Em trap nao ha guitarra nenhuma: o que e gostoso de tocar e a batida, e a voz
+merece a propria trilha. Em pop o gancho costuma ser teclado ou sintetizador.
+Se o projeto assumisse guitarra sempre, ele so serviria para um genero.
+
+Entao o roteamento **fonte -> trilha** e uma decisao de primeira classe, e um
+perfil de genero e so um jeito compacto de escolher um bom conjunto de uma vez:
+
+| genero | PART GUITAR vem de | estrategia |
+|---|---|---|
+| `rock`, `metal`, `acoustic` | stem de guitarra | altura |
+| `pop` | teclado/sintetizador (`other`) | altura |
+| `electronic` | lead sintetizado | altura |
+| `trap`, `percussion` | **bateria** | **timbre** |
+
+`yargen genres` lista todos com o roteamento completo.
+
+Isto **nao e** - e nao deveria ser - automatico. Jogar um MP3 e receber o chart
+certo exige uma decisao musical que a maquina nao tem como tomar por voce. O
+que da para fazer e tornar a escolha barata e informada:
+
+```
+$ yargen inspect "Beat.wav"
+
+  stem         ativo   volume  onsets/s   tonal    brilho
+  ------------------------------------------------------------
+  bass          93%      6%       1.7   100%       78Hz
+  drums         86%     49%       5.0    43%     4287Hz
+  vocals        22%     45%       0.9   100%      424Hz
+  guitar         0%      0%       0.0     0%        0Hz   (so vazamento)
+
+recomendado: --genre trap
+    - nenhum lead melodico; a bateria conduz (86% do tempo, 5.0 onsets/s)
+    - guitarra ausente (0% do tempo)
+    - a trilha de 5 trastes vai charteiar a BATIDA
+```
+
+Ele mede, recomenda e **diz por que** - para voce discordar com conhecimento de
+causa. Um classificador de genero opaco seria pior aqui mesmo se acertasse mais.
+
+Quando o perfil quase acerta, `--set-track` e o escape sem precisar de um
+perfil novo:
+
+```bash
+yargen chart musica.ogg --genre rock --set-track guitar.source=other
+yargen chart musica.ogg --genre pop  --set-track guitar.strategy=percussive
+```
+
+### Por que a bateria nao usa altura
+
+Nao existe "a altura de um bumbo". Mas bateria tem uma escala perceptual
+estavel e obvia: **brilho**. Bumbo e escuro, caixa e media, chimbal e
+brilhante - e isso mapeia direto em grave->agudo no braco, a mesma intuicao que
+faz o mapeamento por altura funcionar para guitarra. O mapper nao distingue os
+dois casos: ele recebe um escalar por nota e distribui em cinco faixas.
+
+Duas diferencas importam:
+
+- As faixas sao **globais**, nao moveis. Um kit tem quatro ou cinco sons e eles
+  nao mudam: o bumbo precisa ser verde no compasso 1 e no compasso 80.
+- Os onsets sao detectados **por banda de frequencia**, independentemente. Numa
+  bateria, tocar duas pecas ao mesmo tempo e a regra: o chimbal marca todas as
+  colcheias e o bumbo cai por cima. Um detector de banda larga funde os dois e
+  o brilho medido vira uma mistura que nao corresponde a peca nenhuma - o bumbo
+  sumia e o chart virava uma parede de chimbal. Por banda, os dois viram um
+  acorde, que e exatamente o que se quer sentir.
+
+Medido contra as 168 pancadas conhecidas de um beat sintetico:
+`P=0.788 R=0.839 F1=0.813`, usando os cinco trastes e 22 acordes.
+
 ## Uso
 
 ```bash
 # tudo de uma vez
 yargen chart musica.ogg \
   --out "Artista - Musica/" \
-  --instruments guitar,vocals \
+  --genre trap \
+  --instruments guitar,bass,vocals \
   --difficulties all \
   --bpm 174 \            # opcional, sobrepõe a detecção
   --offset-ms 0 \
@@ -54,6 +128,8 @@ yargen build ir.json --set mapper.band_window_sec=12 --out "teste2/"
 # régua objetiva contra um chart humano
 yargen validate "teste/notes.mid" "chart-da-comunidade/notes.mid"
 
+yargen inspect musica.ogg    # mede os stems e recomenda um genero
+yargen genres                # lista os perfis e o roteamento de cada um
 yargen config                # imprime todos os parâmetros com seus valores
 yargen cache list|clear      # cache de stems do Demucs
 ```
@@ -86,11 +162,14 @@ IR, é testado com JSON fixo, sem DSP.
 ```
 yargen/
 ├── config.py            ★ TODOS os parâmetros, em um arquivo só
+├── profiles.py          ★ roteamento fonte → trilha por gênero
 ├── audio/loader.py      carga, resample, normalização
 ├── audio/stems.py       Demucs + cache em ~/.cache/yargen
 ├── analysis/tempo.py    beat tracking, grade, BPM
-├── analysis/onsets.py   detecção de onsets
+├── analysis/onsets.py   onsets, banda larga e por banda de frequência
 ├── analysis/pitch.py    pyin / contorno f0
+├── analysis/timbre.py   brilho por onset (o "tom" do conteúdo percussivo)
+├── analysis/survey.py   medição dos stems + recomendação de gênero
 ├── chart/ir.py          IRs + TempoMap
 ├── chart/mapper.py      ★ núcleo: pitch+onset → trastes
 ├── chart/density.py     teto de notas/segundo (compartilhado)
@@ -115,8 +194,9 @@ Estágios, na ordem em que rodam:
    fracos não entram em acorde, senão todo vazamento de bateria vira acorde.
 3. **Cortar densidade** — antes de atribuir trastes, senão o limite de salto é
    calculado sobre notas que vão ser jogadas fora.
-4. **Pitch → traste**: janela móvel de 8s dividida em 5 faixas por percentil,
-   mais âncora (pitch repetido → mesmo traste) para preservar riffs.
+4. **Tom → traste**: 5 faixas por percentil. O "tom" é altura (melódico) ou
+   brilho (percussivo); as faixas são móveis (8s) ou globais conforme o caso.
+   Âncora (tom repetido → mesmo traste) preserva riffs.
 5. **Limitar saltos**: entre notas a menos de 150ms, no máximo 2 trastes.
 6. **Sustains**, **HOPO**, **Star Power**.
 
@@ -181,7 +261,7 @@ Precisão/recall dos onsets contra um chart humano, tolerância ±50ms. Não vai
 bater 100% e nem precisa: serve como régua para saber se uma mudança nos
 parâmetros melhorou ou piorou. Sem isso, ajuste de heurística é achismo.
 
-Testes: `pytest` (121 testes, ~1s, nenhum toca em áudio).
+Testes: `pytest` (154 testes, ~3s, nenhum toca em áudio real).
 
 ## Estado dos marcos
 
@@ -193,6 +273,7 @@ Testes: `pytest` (121 testes, ~1s, nenhum toca em áudio).
 | M3 | mapper de pitch | ✅ riff sai reconhecível e estável entre repetições |
 | M4 | dificuldades | ✅ tabela de densidade/cores/acordes respeitada |
 | M5 | vocals | ⚠️ caminho de altura validado; **faster-whisper não executado** (ver abaixo) |
+| M6 | gênero / roteamento | ✅ perfis, mapeamento percussivo, `inspect` com recomendação |
 
 ### O que não pôde ser verificado nesta máquina
 
@@ -216,6 +297,30 @@ sintética:
 
 Metade das notas do Expert charteado da mixagem vinha da bateria. É exatamente
 o motivo de o M2 existir.
+
+## Defeitos encontrados por medição
+
+Registrados porque cada um estava silenciosamente errado e nenhum aparecia como
+erro — só como chart pior:
+
+- **Acordes nunca eram gerados**, em nenhuma estratégia. `assign_frets`
+  reduzia um evento de vários tons à mediana e devolvia um traste só; o
+  estágio de acordes recebia sempre uma lista de um elemento.
+- **As faixas de percentil eram calculadas sobre a mediana de cada evento**,
+  não sobre os tons individuais. Num acorde bumbo+chimbal a mediana cai no
+  meio, onde não há peça nenhuma, e a caixa era classificada junto do bumbo.
+- **`voiced_prob >= 0.5` apagava linhas de 808 inteiras.** O pyin marcava 91%
+  dos frames como vozeados e acertava a altura, mas a probabilidade por frame
+  não passava de 0.485 — ela não tem escala universal. `PART BASS` caía
+  silenciosamente para trastes aleatórios. Agora confiamos na decisão do pyin.
+- **A última nota sempre sustentava**, porque o valor de fallback do intervalo
+  era exatamente o limiar de sustain. Inclusive uma pancada de bumbo.
+- **Normalizar cada stem apagava o balanço da mixagem** — que é exatamente a
+  informação que diz qual instrumento conduz a música.
+- **Energia não responde "esta música tem guitarra?".** Com energia bruta, o
+  808 de um beat de trap leva 78% e parece que a música é o baixo; com
+  ponderação A ele cai para 4% e some. A recomendação passou a usar
+  **atividade no tempo**, que não tem esse problema.
 
 ## Fora de escopo por enquanto
 

@@ -77,6 +77,16 @@ class OnsetConfig:
     min_strength: float = 0.04
     """Descarta onsets abaixo disso antes de qualquer outra coisa."""
 
+    collapse_band_radius: int = 2
+    """So na deteccao percussiva. Duas deteccoes simultaneas a esta distancia
+    ou menos em bandas sao tratadas como a MESMA pancada espalhada, e fica a
+    mais forte. Acima disso viram pecas diferentes tocando juntas, e o mapper
+    as transforma em acorde.
+
+    1 e permissivo: quase toda pancada de banda larga vira acorde, e o chart
+    enche de acordes falsos. 3 ou mais e restritivo: nem bumbo+chimbal, que e
+    a assinatura do trap, sobrevive."""
+
 
 # ---------------------------------------------------------------------- pitch
 
@@ -96,8 +106,15 @@ class PitchConfig:
     method: str = "pyin"
     """"pyin" (bom e lento) ou "yin" (rapido e mais ruidoso)."""
 
-    voiced_threshold: float = 0.5
-    """Probabilidade minima de "voiced" para aceitar o f0 de um frame."""
+    voiced_threshold: float = 0.0
+    """Aperto EXTRA sobre a decisao de vozeamento do pyin. 0 = desligado.
+
+    O pyin ja decide sozinho quais frames sao vozeados (voiced_flag, suavizado
+    por Viterbi) e e nessa decisao que confiamos. A probabilidade por frame nao
+    tem escala universal: em fonte grave ou distorcida ela fica inteira abaixo
+    de 0.5 mesmo quando a deteccao esta certa. Um limiar de 0.5 aqui apagava
+    linhas de 808 por completo. Suba isto so para material muito ruidoso, e
+    olhando o resultado."""
 
     median_filter_frames: int = 5
     """Suavizacao do contorno em semitons. 0 desliga."""

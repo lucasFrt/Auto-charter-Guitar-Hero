@@ -55,7 +55,7 @@ def test_simultaneous_onsets_become_one_chord():
     tm = TempoMap.constant(120.0, 10.0)
     raw = [AnalyzedNote(0.0, 0.9, 220.0), AnalyzedNote(0.01, 0.9, 277.2)]
     events = group_chords(quantize(raw, tm, DEFAULT.mapper), tm, DEFAULT.mapper)
-    assert len(events) == 1 and len(events[0].pitches) == 2
+    assert len(events) == 1 and len(events[0].tones) == 2
 
 
 def test_weak_onsets_do_not_form_chords():
@@ -63,7 +63,7 @@ def test_weak_onsets_do_not_form_chords():
     tm = TempoMap.constant(120.0, 10.0)
     raw = [AnalyzedNote(0.0, 0.9, 220.0), AnalyzedNote(0.01, 0.10, 277.2)]
     events = group_chords(quantize(raw, tm, DEFAULT.mapper), tm, DEFAULT.mapper)
-    assert len(events) == 1 and len(events[0].pitches) == 1
+    assert len(events) == 1 and len(events[0].tones) == 1
 
 
 def test_chords_are_limited_to_two_adjacent_frets():
