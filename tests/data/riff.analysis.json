@@ -1,0 +1,239 @@
+{
+  "version": 1,
+  "meta": {
+    "name": "Riff de teste",
+    "artist": "YARGen",
+    "album": "",
+    "genre": "",
+    "year": "",
+    "charter": "YARGen",
+    "duration": 8.0
+  },
+  "tempo": {
+    "beats": [
+      0.0,
+      0.5,
+      1.0,
+      1.5,
+      2.0,
+      2.5,
+      3.0,
+      3.5,
+      4.0,
+      4.5,
+      5.0,
+      5.5,
+      6.0,
+      6.5,
+      7.0,
+      7.5,
+      8.0,
+      8.5,
+      9.0,
+      9.5
+    ],
+    "resolution": 480,
+    "beats_per_bar": 4,
+    "downbeat_index": 0
+  },
+  "tracks": {
+    "guitar": {
+      "name": "guitar",
+      "source_stem": "guitar",
+      "notes": [
+        {
+          "time": 0.0,
+          "strength": 0.95,
+          "duration": 0.25,
+          "pitch_hz": 110.0
+        },
+        {
+          "time": 0.25,
+          "strength": 0.6,
+          "duration": 0.25,
+          "pitch_hz": 146.83
+        },
+        {
+          "time": 0.5,
+          "strength": 0.65,
+          "duration": 0.25,
+          "pitch_hz": 164.81
+        },
+        {
+          "time": 0.75,
+          "strength": 0.55,
+          "duration": 0.25,
+          "pitch_hz": 196.0
+        },
+        {
+          "time": 1.0,
+          "strength": 0.6,
+          "duration": 0.25,
+          "pitch_hz": 164.81
+        },
+        {
+          "time": 1.25,
+          "strength": 0.65,
+          "duration": 0.25,
+          "pitch_hz": 146.83
+        },
+        {
+          "time": 1.5,
+          "strength": 0.55,
+          "duration": 0.25,
+          "pitch_hz": 130.81
+        },
+        {
+          "time": 1.75,
+          "strength": 0.6,
+          "duration": 0.25,
+          "pitch_hz": 146.83
+        },
+        {
+          "time": 2.0,
+          "strength": 0.95,
+          "duration": 0.25,
+          "pitch_hz": 110.0
+        },
+        {
+          "time": 2.25,
+          "strength": 0.6,
+          "duration": 0.25,
+          "pitch_hz": 146.83
+        },
+        {
+          "time": 2.5,
+          "strength": 0.65,
+          "duration": 0.25,
+          "pitch_hz": 164.81
+        },
+        {
+          "time": 2.75,
+          "strength": 0.55,
+          "duration": 0.25,
+          "pitch_hz": 196.0
+        },
+        {
+          "time": 3.0,
+          "strength": 0.6,
+          "duration": 0.25,
+          "pitch_hz": 164.81
+        },
+        {
+          "time": 3.25,
+          "strength": 0.65,
+          "duration": 0.25,
+          "pitch_hz": 146.83
+        },
+        {
+          "time": 3.5,
+          "strength": 0.55,
+          "duration": 0.25,
+          "pitch_hz": 130.81
+        },
+        {
+          "time": 3.75,
+          "strength": 0.6,
+          "duration": 0.25,
+          "pitch_hz": 146.83
+        },
+        {
+          "time": 4.0,
+          "strength": 0.95,
+          "duration": 0.25,
+          "pitch_hz": 110.0
+        },
+        {
+          "time": 4.25,
+          "strength": 0.6,
+          "duration": 0.25,
+          "pitch_hz": 146.83
+        },
+        {
+          "time": 4.5,
+          "strength": 0.65,
+          "duration": 0.25,
+          "pitch_hz": 164.81
+        },
+        {
+          "time": 4.75,
+          "strength": 0.55,
+          "duration": 0.25,
+          "pitch_hz": 196.0
+        },
+        {
+          "time": 5.0,
+          "strength": 0.6,
+          "duration": 0.25,
+          "pitch_hz": 164.81
+        },
+        {
+          "time": 5.25,
+          "strength": 0.65,
+          "duration": 0.25,
+          "pitch_hz": 146.83
+        },
+        {
+          "time": 5.5,
+          "strength": 0.55,
+          "duration": 0.25,
+          "pitch_hz": 130.81
+        },
+        {
+          "time": 5.75,
+          "strength": 0.6,
+          "duration": 0.25,
+          "pitch_hz": 146.83
+        },
+        {
+          "time": 6.0,
+          "strength": 0.95,
+          "duration": 0.25,
+          "pitch_hz": 110.0
+        },
+        {
+          "time": 6.25,
+          "strength": 0.6,
+          "duration": 0.25,
+          "pitch_hz": 146.83
+        },
+        {
+          "time": 6.5,
+          "strength": 0.65,
+          "duration": 0.25,
+          "pitch_hz": 164.81
+        },
+        {
+          "time": 6.75,
+          "strength": 0.55,
+          "duration": 0.25,
+          "pitch_hz": 196.0
+        },
+        {
+          "time": 7.0,
+          "strength": 0.6,
+          "duration": 0.25,
+          "pitch_hz": 164.81
+        },
+        {
+          "time": 7.25,
+          "strength": 0.65,
+          "duration": 0.25,
+          "pitch_hz": 146.83
+        },
+        {
+          "time": 7.5,
+          "strength": 0.55,
+          "duration": 0.25,
+          "pitch_hz": 130.81
+        },
+        {
+          "time": 7.75,
+          "strength": 0.6,
+          "duration": 0.25,
+          "pitch_hz": 146.83
+        }
+      ]
+    }
+  }
+}
