@@ -25,11 +25,17 @@ pip install -e ".[vocals]"       # + faster-whisper: letra sincronizada.
 pip install -e ".[all]"
 ```
 
-Em CPU, prefira instalar o torch pelo índice CPU-only (bem menor):
+Em CPU, instale o torch pelo índice CPU-only. Não é detalhe: a build padrão
+arrasta as bibliotecas CUDA e o ambiente vai de ~1 GB para ~6 GB, sem servir
+para nada numa máquina sem placa NVIDIA.
 
 ```bash
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 ```
+
+Testado em Python 3.11 e 3.13 (com librosa 0.11 e 1.0). Os formatos de áudio
+vêm do libsndfile embutido no `soundfile` — mp3, ogg, wav, flac e opus
+carregam sem ffmpeg.
 
 Sem os extras nada quebra: o pipeline detecta a ausência, avisa e segue com o
 que tem. Um chart sem letra é muito melhor do que uma rodada de vários minutos
@@ -37,9 +43,28 @@ que morre no último passo.
 
 ## Interface web
 
+**Windows** (PowerShell, na pasta do projeto):
+
+```powershell
+.\start.ps1              # interface em http://127.0.0.1:8000
+.\start.ps1 -Full        # + Demucs e faster-whisper
+```
+
+**Linux / macOS**:
+
 ```bash
-pip install -e ".[web]"
-yargen-web                      # http://127.0.0.1:8000
+./start.sh
+./start.sh --full
+```
+
+Os scripts criam o ambiente virtual, instalam o que falta e sobem o servidor.
+Se preferir na mão:
+
+```bash
+python -m venv .venv                        # NÃO use `py`: ele só existe se o
+.venv\Scripts\activate                      # Python Launcher estiver instalado,
+pip install -e ".[web]"                     # e o Python da Microsoft Store não
+yargen-web                                  # o instala
 ```
 
 Sobe o arquivo, escolhe o gênero, acompanha o log ao vivo e baixa um `.zip`
