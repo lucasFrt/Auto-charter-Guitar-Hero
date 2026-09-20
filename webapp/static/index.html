@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YARGen</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230f1115'/%3E%3Crect x='3' y='4' width='2.5' height='8' rx='1' fill='%234ade80'/%3E%3Crect x='6.75' y='6' width='2.5' height='6' rx='1' fill='%23f87171'/%3E%3Crect x='10.5' y='3' width='2.5' height='9' rx='1' fill='%23fbbf24'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel-2:#1e222b; --line:#2a2f3a;
+    --ink:#e6e9ef; --dim:#9aa3b2; --accent:#ff7a3d; --ok:#4ade80;
+    --warn:#fbbf24; --err:#f87171; --mono:ui-monospace,"Cascadia Code",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+  a{color:var(--accent)}
+  header{padding:20px 16px 8px;max-width:1100px;margin:0 auto;
+         display:flex;gap:16px;align-items:baseline;flex-wrap:wrap}
+  h1{margin:0;font-size:22px;letter-spacing:.2px}
+  h1 span{color:var(--accent)}
+  .sub{color:var(--dim);font-size:13px}
+  main{max-width:1100px;margin:0 auto;padding:12px 16px 60px;
+       display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:18px}
+  @media (max-width:860px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+  .card h2{margin:0 0 12px;font-size:13px;text-transform:uppercase;
+           letter-spacing:.09em;color:var(--dim);font-weight:600}
+  label{display:block;margin:12px 0 5px;font-size:13px;color:var(--dim)}
+  input,select,textarea,button{font:inherit;color:var(--ink);
+    background:var(--panel-2);border:1px solid var(--line);
+    border-radius:7px;padding:9px 10px;width:100%}
+  textarea{font-family:var(--mono);font-size:12.5px;min-height:64px;resize:vertical}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  .row{display:flex;gap:10px}.row>*{flex:1}
+  .drop{border:2px dashed var(--line);border-radius:10px;padding:22px 14px;
+        text-align:center;color:var(--dim);cursor:pointer;transition:.15s;background:var(--panel-2)}
+  .drop:hover,.drop.over{border-color:var(--accent);color:var(--ink)}
+  .drop strong{display:block;color:var(--ink);font-size:14px;word-break:break-all}
+  .check{display:flex;align-items:center;gap:9px;margin:11px 0}
+  .check input{width:auto}
+  .check label{margin:0}
+  .actions{display:flex;gap:10px;margin-top:18px}
+  button{cursor:pointer;font-weight:600;transition:.15s}
+  button:hover:not(:disabled){border-color:var(--accent)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .primary{background:var(--accent);border-color:var(--accent);color:#1a0d05}
+  details{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+  summary{cursor:pointer;color:var(--dim);font-size:13px}
+  .log{font-family:var(--mono);font-size:12.5px;background:#0b0d11;
+       border:1px solid var(--line);border-radius:8px;padding:12px;
+       height:330px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+  .log .e{color:var(--err)} .log .w{color:var(--warn)} .log .k{color:var(--ok)}
+  .badge{display:inline-block;padding:2px 9px;border-radius:99px;
+         font-size:11.5px;font-weight:600;letter-spacing:.03em}
+  .b-queued{background:#2a2f3a;color:var(--dim)}
+  .b-running{background:#3a2a14;color:var(--warn)}
+  .b-done{background:#14321f;color:var(--ok)}
+  .b-error{background:#3a1a1a;color:var(--err)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--dim);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em}
+  td.num{text-align:right;font-family:var(--mono)}
+  .hint{color:var(--dim);font-size:12.5px;margin-top:8px}
+  .warn-box{background:#2a2114;border:1px solid #4a3a1a;color:var(--warn);
+            border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:14px}
+  .jobs{list-style:none;padding:0;margin:10px 0 0;font-size:13px}
+  .jobs li{display:flex;justify-content:space-between;gap:10px;padding:7px 0;
+           border-bottom:1px solid var(--line);cursor:pointer}
+  .jobs li:hover{color:var(--accent)}
+  .genre-note{color:var(--dim);font-size:12.5px;margin-top:6px;min-height:1.2em}
+</style>
+</head>
+<body>
+<header>
+  <h1>YAR<span>Gen</span></h1>
+  <span class="sub">áudio → chart jogável para YARG / Clone Hero</span>
+  <span class="sub" id="health" style="margin-left:auto"></span>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Música</h2>
+    <div id="warn" class="warn-box" hidden></div>
+
+    <div class="drop" id="drop">
+      <strong id="fname">Escolher arquivo</strong>
+      arraste aqui ou clique — mp3, ogg, wav, flac, opus, m4a
+    </div>
+    <input type="file" id="file" accept=".mp3,.ogg,.wav,.flac,.opus,.m4a" hidden>
+
+    <label for="genre">Gênero (define o que vira a trilha de 5 trastes)</label>
+    <select id="genre"></select>
+    <div class="genre-note" id="genre-note"></div>
+
+    <div class="row">
+      <div>
+        <label for="instruments">Instrumentos</label>
+        <select id="instruments">
+          <option value="all">todos</option>
+          <option value="guitar">só guitarra</option>
+          <option value="guitar,vocals">guitarra + voz</option>
+          <option value="guitar,bass">guitarra + baixo</option>
+        </select>
+      </div>
+      <div>
+        <label for="difficulties">Dificuldades</label>
+        <select id="difficulties">
+          <option value="all">todas</option>
+          <option value="expert">só Expert</option>
+          <option value="expert,hard">Expert + Hard</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div><label for="bpm">BPM (vazio = detectar)</label>
+           <input id="bpm" type="number" step="0.1" placeholder="auto"></div>
+      <div><label for="offset">Offset (ms)</label>
+           <input id="offset" type="number" value="0"></div>
+    </div>
+
+    <div class="check">
+      <input type="checkbox" id="stems" checked>
+      <label for="stems">Separar stems (Demucs) — lento, mas muito melhor</label>
+    </div>
+
+    <details>
+      <summary>Avançado</summary>
+      <div class="row">
+        <div><label for="name">Título</label><input id="name" placeholder="do nome do arquivo"></div>
+        <div><label for="artist">Artista</label><input id="artist" placeholder="do nome do arquivo"></div>
+      </div>
+      <label for="charter">Charter</label>
+      <input id="charter" placeholder="YARGen">
+      <label for="cfg">Parâmetros (um por linha, <code>chave=valor</code>)</label>
+      <textarea id="cfg" placeholder="mapper.max_jump=3&#10;mapper.band_window_sec=12"></textarea>
+      <div class="check">
+        <input type="checkbox" id="keepir">
+        <label for="keepir">Incluir a IR em JSON no zip</label>
+      </div>
+    </details>
+
+    <div class="actions">
+      <button id="btn-inspect">Analisar</button>
+      <button id="btn-chart" class="primary">Gerar chart</button>
+    </div>
+    <div class="hint">“Analisar” só mede a música e recomenda um gênero — não gera chart.</div>
+
+    <h2 style="margin-top:22px">Histórico</h2>
+    <ul class="jobs" id="jobs"></ul>
+  </section>
+
+  <section class="card">
+    <h2>Andamento <span id="status"></span></h2>
+    <div class="log" id="log">Nenhum trabalho ainda.</div>
+    <div id="result"></div>
+  </section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+let file = null, current = null, seen = 0, timer = null, genres = [];
+
+// ---------------------------------------------------------------- estado
+
+async function health(){
+  try{
+    const h = await (await fetch('/api/health')).json();
+    $('#health').textContent =
+      `stems ${h.stems_available?'✓':'✗'} · letra ${h.lyrics_available?'✓':'✗'} · máx ${h.max_upload_mb} MB`;
+    const missing = [];
+    if(!h.stems_available) missing.push('Demucs (separação de stems)');
+    if(!h.lyrics_available) missing.push('faster-whisper (letra sincronizada)');
+    if(missing.length){
+      $('#warn').hidden = false;
+      $('#warn').textContent = 'Não instalado nesta máquina: ' + missing.join(' e ')
+        + '. O chart ainda sai, mas pior — veja o README.';
+    }
+    if(!h.stems_available) $('#stems').checked = false;
+  }catch(e){ $('#health').textContent = 'servidor fora do ar'; }
+}
+
+async function loadGenres(){
+  genres = await (await fetch('/api/genres')).json();
+  $('#genre').innerHTML = genres
+    .map(g => `<option value="${g.name}">${g.name}${g.aliases.length?' — '+g.aliases.slice(0,3).join(', '):''}</option>`)
+    .join('');
+  showGenre();
+}
+
+function showGenre(){
+  const g = genres.find(x => x.name === $('#genre').value);
+  if(!g) return;
+  const lead = g.plans.find(p => p.track === 'PART GUITAR');
+  $('#genre-note').textContent = lead
+    ? `PART GUITAR ← ${lead.sources[0]} (${lead.strategy}) · ${lead.note}` : g.description;
+}
+
+// ------------------------------------------------------------- upload ui
+
+$('#drop').onclick = () => $('#file').click();
+$('#file').onchange = e => pick(e.target.files[0]);
+['dragover','dragenter'].forEach(ev => $('#drop').addEventListener(ev, e => {
+  e.preventDefault(); $('#drop').classList.add('over');
+}));
+['dragleave','drop'].forEach(ev => $('#drop').addEventListener(ev, e => {
+  e.preventDefault(); $('#drop').classList.remove('over');
+}));
+$('#drop').addEventListener('drop', e => pick(e.dataTransfer.files[0]));
+
+function pick(f){
+  if(!f) return;
+  file = f;
+  $('#fname').textContent = `${f.name}  (${(f.size/1048576).toFixed(1)} MB)`;
+}
+
+$('#genre').onchange = showGenre;
+
+// ------------------------------------------------------------------ jobs
+
+async function submit(mode){
+  if(!file){ alert('Escolha um arquivo de áudio primeiro.'); return; }
+  const fd = new FormData();
+  fd.append('audio', file);
+  fd.append('mode', mode);
+  fd.append('genre', $('#genre').value);
+  fd.append('instruments', $('#instruments').value);
+  fd.append('difficulties', $('#difficulties').value);
+  fd.append('bpm', $('#bpm').value);
+  fd.append('offset_ms', $('#offset').value || '0');
+  fd.append('use_stems', $('#stems').checked);
+  fd.append('keep_ir', $('#keepir').checked);
+  fd.append('name', $('#name').value);
+  fd.append('artist', $('#artist').value);
+  fd.append('charter', $('#charter').value);
+  fd.append('config_sets', $('#cfg').value);
+
+  setBusy(true);
+  const res = await fetch('/api/jobs', {method:'POST', body:fd});
+  if(!res.ok){
+    const err = await res.json().catch(() => ({detail:res.statusText}));
+    setBusy(false);
+    $('#log').innerHTML = `<span class="e">${err.detail || 'falhou'}</span>`;
+    return;
+  }
+  watch((await res.json()).id);
+  refreshJobs();
+}
+
+function watch(id){
+  current = id; seen = 0;
+  $('#log').textContent = '';
+  $('#result').innerHTML = '';
+  clearInterval(timer);
+  poll();
+  timer = setInterval(poll, 1000);
+}
+
+async function poll(){
+  if(!current) return;
+  const job = await (await fetch(`/api/jobs/${current}?since=${seen}`)).json();
+  seen = job.log_total ?? seen;
+  for(const line of job.log) append(line);
+  $('#status').innerHTML = `<span class="badge b-${job.status}">${job.status}</span>`;
+  if(job.status === 'done' || job.status === 'error'){
+    clearInterval(timer); timer = null;
+    setBusy(false);
+    render(job);
+    refreshJobs();
+  }
+}
+
+function append(line){
+  const el = document.createElement('span');
+  el.className = /\[erro\]|Traceback|Error/.test(line) ? 'e'
+               : /falhou|indisponivel|sem transcricao|pouca altura|nao carrega/.test(line) ? 'w'
+               : /\[pronto\]|\[saida\]/.test(line) ? 'k' : '';
+  el.textContent = line + '\n';
+  $('#log').appendChild(el);
+  $('#log').scrollTop = $('#log').scrollHeight;
+}
+
+function render(job){
+  const r = job.result || {};
+  if(job.status === 'error'){
+    $('#result').innerHTML = `<p class="hint" style="color:var(--err)">${job.error}</p>`;
+    return;
+  }
+  if(job.mode === 'inspect'){
+    const rows = (r.stems||[]).map(s => `<tr>
+        <td>${s.name}${s.present?'':' <span class="hint">(só vazamento)</span>'}</td>
+        <td class="num">${(s.activity*100).toFixed(0)}%</td>
+        <td class="num">${s.onset_rate.toFixed(1)}</td>
+        <td class="num">${(s.pitched*100).toFixed(0)}%</td>
+        <td class="num">${s.centroid} Hz</td></tr>`).join('');
+    $('#result').innerHTML = `
+      <table><thead><tr><th>stem</th><th>ativo</th><th>onsets/s</th>
+        <th>tonal</th><th>brilho</th></tr></thead><tbody>${rows}</tbody></table>
+      <p class="hint"><strong style="color:var(--accent)">Recomendado: ${r.recommended}</strong><br>
+        ${(r.reasons||[]).map(x => '• ' + x).join('<br>')}</p>
+      <button id="apply">Usar gênero ${r.recommended}</button>`;
+    $('#apply').onclick = () => { $('#genre').value = r.recommended; showGenre(); };
+    return;
+  }
+  const rows = (r.tracks||[]).map(t => `<tr>
+      <td>${t.track}</td><td>${t.source} <span class="hint">${t.strategy}</span></td>
+      <td class="num">${Object.entries(t.counts).map(([d,n]) => d[0].toUpperCase()+':'+n).join('  ')}</td>
+    </tr>`).join('');
+  $('#result').innerHTML = `
+    <table><thead><tr><th>trilha</th><th>fonte</th><th>notas</th></tr></thead>
+    <tbody>${rows}${r.vocals?`<tr><td>PART VOCALS</td><td>vocals</td>
+      <td class="num">${r.vocals}</td></tr>`:''}</tbody></table>
+    <p class="hint">${r.bpm} BPM · ${r.duration}s · gênero ${r.genre}</p>
+    <a href="${job.download}"><button class="primary">Baixar ${r.folder}.zip</button></a>
+    <p class="hint">Descompacte dentro da pasta de músicas do YARG e dê rescan.</p>`;
+}
+
+async function refreshJobs(){
+  const list = await (await fetch('/api/jobs')).json();
+  $('#jobs').innerHTML = list.map(j => `<li data-id="${j.id}">
+      <span>${j.song}</span>
+      <span class="badge b-${j.status}">${j.mode === 'inspect' ? 'análise' : j.status}</span>
+    </li>`).join('') || '<li class="hint">vazio</li>';
+  $('#jobs').querySelectorAll('li[data-id]').forEach(li =>
+    li.onclick = () => watch(li.dataset.id));
+}
+
+function setBusy(on){
+  $('#btn-chart').disabled = on;
+  $('#btn-inspect').disabled = on;
+}
+
+$('#btn-chart').onclick = () => submit('chart');
+$('#btn-inspect').onclick = () => submit('inspect');
+
+health(); loadGenres(); refreshJobs();
+</script>
+</body>
+</html>

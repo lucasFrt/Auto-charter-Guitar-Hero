@@ -35,6 +35,33 @@ Sem os extras nada quebra: o pipeline detecta a ausência, avisa e segue com o
 que tem. Um chart sem letra é muito melhor do que uma rodada de vários minutos
 que morre no último passo.
 
+## Interface web
+
+```bash
+pip install -e ".[web]"
+yargen-web                      # http://127.0.0.1:8000
+```
+
+Sobe o arquivo, escolhe o gênero, acompanha o log ao vivo e baixa um `.zip`
+pronto para descompactar na pasta de músicas do YARG. Tem também o botão
+**Analisar**, que só mede a música e recomenda um gênero, sem gerar chart.
+
+O desenho tem um ponto que importa para hospedar: **nenhuma requisição HTTP
+espera o chart ficar pronto**. O upload cria um job e volta na hora; o
+navegador pergunta o andamento. Separar stems leva minutos, e qualquer coisa
+no caminho — IIS, nginx, o próprio navegador — cortaria uma requisição tão
+longa. Assim nenhuma passa de alguns segundos e o servidor funciona atrás de
+qualquer proxy sem ajuste de timeout.
+
+Um worker só, de propósito: o pipeline satura os núcleos sozinho, e dois jobs
+em paralelo não terminam mais rápido — só competem por memória.
+
+Para publicar no Windows Server com IIS: **[webapp/DEPLOY-IIS.md](webapp/DEPLOY-IIS.md)**
+(o `web.config` já vai pronto). Não serve para Vercel nem para nenhuma
+plataforma serverless: só as dependências de análise dão 422 MB, e com Demucs
+1,6 GB, contra um limite típico de 250 MB por bundle — e o Demucs leva
+minutos, contra um teto de 60 a 300 segundos por invocação.
+
 ## A decisao que mais importa: o que chartear
 
 A premissa obvia - "a trilha de guitarra vem da guitarra" - so vale para rock.
@@ -180,6 +207,12 @@ yargen/
 ├── validate/compare.py  precisão/recall contra chart humano
 ├── pipeline.py
 └── cli.py
+
+webapp/
+├── server.py            API FastAPI + fila de jobs
+├── static/index.html    interface (sem build, sem framework)
+├── web.config           IIS + HttpPlatformHandler
+└── DEPLOY-IIS.md
 ```
 
 ## O mapper
@@ -261,7 +294,8 @@ Precisão/recall dos onsets contra um chart humano, tolerância ±50ms. Não vai
 bater 100% e nem precisa: serve como régua para saber se uma mudança nos
 parâmetros melhorou ou piorou. Sem isso, ajuste de heurística é achismo.
 
-Testes: `pytest` (154 testes, ~3s, nenhum toca em áudio real).
+Testes: `pytest` (190 testes, ~15s). Os da API web executam jobs de verdade,
+com 3 segundos de áudio sintético.
 
 ## Estado dos marcos
 
